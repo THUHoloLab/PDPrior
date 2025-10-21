@@ -1,11 +1,11 @@
 import argparse
 import inspect
 
-from . import gaussian_diffusion_x0_enhancement as gd
-from . import gaussian_diffusion_x0_enhancement_dual as gd_final
-from . import gaussian_diffusion_x0_enhancement_direct as gd_direct
-from . import gaussian_diffusion_x0_enhancement_HDR as gd_HDR
-from .respace_x0_enhancement import SpacedDiffusion, SpacedDiffusion_1, SpacedDiffusion_direct, SpacedDiffusion_HDR, space_timesteps
+#from . import gaussian_diffusion_x0_enhancement as gd
+#from . import gaussian_diffusion_x0_enhancement_dual as gd_final
+#from . import gaussian_diffusion_x0_enhancement_direct as gd_direct
+from . import gaussian_diffusion_x0_enhancement_RR as gd_RR
+from .respace_x0_enhancement import SpacedDiffusion, space_timesteps
 from .unet import SuperResModel, UNetModel, EncoderUNetModel
 
 NUM_CLASSES = 1000
@@ -48,20 +48,20 @@ def model_and_diffusion_defaults():
     Defaults for image training.
     """
     res = dict(
-        attention_resolutions="32,16,8",
+        attention_resolutions="16,16,8",
         class_cond=False,
         image_size=256,
         learn_sigma=True,
-        noise_schedule="cosine",#"linear","cosine"
-        num_channels=256, # 256
-        num_head_channels=64,
+        noise_schedule="cosine",  # "linear","cosine"
+        num_channels=64,  # 256
+        num_head_channels=32,
         num_res_blocks=2,
         resblock_updown=True,
         use_fp16=True,
         use_scale_shift_norm=True,
-        num_heads=4,
+        num_heads=2,
         num_heads_upsample=-1,
-        channel_mult="",
+        channel_mult="1,1,2,2",
         dropout=0.0,
         use_checkpoint=False,
         use_new_attention_order=False,
@@ -74,62 +74,6 @@ def classifier_and_diffusion_defaults():
     res = classifier_defaults()
     res.update(diffusion_defaults())
     return res
-
-
-def create_model_and_diffusion(
-    image_size,
-    class_cond,
-    learn_sigma,
-    num_channels,
-    num_res_blocks,
-    channel_mult,
-    num_heads,
-    num_head_channels,
-    num_heads_upsample,
-    attention_resolutions,
-    dropout,
-    diffusion_steps,
-    noise_schedule,
-    timestep_respacing,
-    use_kl,
-    predict_xstart,
-    rescale_timesteps,
-    rescale_learned_sigmas,
-    use_checkpoint,
-    use_scale_shift_norm,
-    resblock_updown,
-    use_fp16,
-    use_new_attention_order,
-):
-    model = create_model(
-        image_size,
-        num_channels,
-        num_res_blocks,
-        channel_mult=channel_mult,
-        learn_sigma=learn_sigma,
-        class_cond=class_cond,
-        use_checkpoint=use_checkpoint,
-        attention_resolutions=attention_resolutions,
-        num_heads=num_heads,
-        num_head_channels=num_head_channels,
-        num_heads_upsample=num_heads_upsample,
-        use_scale_shift_norm=use_scale_shift_norm,
-        dropout=dropout,
-        resblock_updown=resblock_updown,
-        use_fp16=use_fp16,
-        use_new_attention_order=use_new_attention_order,
-    )
-    diffusion = create_gaussian_diffusion(
-        steps=diffusion_steps,
-        learn_sigma=learn_sigma,
-        noise_schedule=noise_schedule,
-        use_kl=use_kl,
-        predict_xstart=predict_xstart,
-        rescale_timesteps=rescale_timesteps,
-        rescale_learned_sigmas=rescale_learned_sigmas,
-        timestep_respacing=timestep_respacing,
-    )
-    return model, diffusion
 
 
 def create_model(
@@ -217,7 +161,7 @@ def create_classifier_and_diffusion(
         classifier_resblock_updown,
         classifier_pool,
     )
-    diffusion = create_gaussian_diffusion(
+    diffusion = create_gaussian_diffusion_RR(
         steps=diffusion_steps,
         learn_sigma=learn_sigma,
         noise_schedule=noise_schedule,
@@ -388,257 +332,6 @@ def sr_create_model(
     )
 
 
-def create_gaussian_diffusion(
-    *,
-    steps=1000,
-    learn_sigma=False,
-    sigma_small=False,
-    noise_schedule="linear",
-    use_kl=False,
-    predict_xstart=False,
-    rescale_timesteps=False,
-    rescale_learned_sigmas=False,
-    timestep_respacing="",
-):
-    betas = gd.get_named_beta_schedule(noise_schedule, steps)
-    # betas is a 1D numpy array of length steps
-    if use_kl:
-        loss_type = gd.LossType.RESCALED_KL
-    elif rescale_learned_sigmas:
-        loss_type = gd.LossType.RESCALED_MSE
-    else: # default type
-        loss_type = gd.LossType.MSE
-    if not timestep_respacing:
-        timestep_respacing = [steps]
-    
-    # use_timesteps is a set of integers that range from 0 to steps-1
-    # it contains timestep_respacing integers that uniformly covers the interval
-    # learn_sigma is true in our case, rescale_timesteps is false in our time
-    return SpacedDiffusion(
-        use_timesteps=space_timesteps(steps, timestep_respacing),
-        betas=betas,
-        model_mean_type=(
-            gd.ModelMeanType.EPSILON if not predict_xstart else gd.ModelMeanType.START_X
-            # gd.ModelMeanType.PREVIOUS_X if not predict_xstart else gd.ModelMeanType.EPSILON
-        ),
-        model_var_type=(
-            (
-                gd.ModelVarType.FIXED_LARGE
-                if not sigma_small
-                else gd.ModelVarType.FIXED_SMALL
-            )
-            if not learn_sigma
-            else gd.ModelVarType.LEARNED_RANGE
-        ),
-        loss_type=loss_type,
-        rescale_timesteps=rescale_timesteps,
-    )
-
-def create_model_and_diffusion_final(
-    image_size,
-    class_cond,
-    learn_sigma,
-    num_channels,
-    num_res_blocks,
-    channel_mult,
-    num_heads,
-    num_head_channels,
-    num_heads_upsample,
-    attention_resolutions,
-    dropout,
-    diffusion_steps,
-    noise_schedule,
-    timestep_respacing,
-    use_kl,
-    predict_xstart,
-    rescale_timesteps,
-    rescale_learned_sigmas,
-    use_checkpoint,
-    use_scale_shift_norm,
-    resblock_updown,
-    use_fp16,
-    use_new_attention_order,
-):
-    model = create_model(
-        image_size,
-        num_channels,
-        num_res_blocks,
-        channel_mult=channel_mult,
-        learn_sigma=learn_sigma,
-        class_cond=class_cond,
-        use_checkpoint=use_checkpoint,
-        attention_resolutions=attention_resolutions,
-        num_heads=num_heads,
-        num_head_channels=num_head_channels,
-        num_heads_upsample=num_heads_upsample,
-        use_scale_shift_norm=use_scale_shift_norm,
-        dropout=dropout,
-        resblock_updown=resblock_updown,
-        use_fp16=use_fp16,
-        use_new_attention_order=use_new_attention_order,
-    )
-    diffusion = create_gaussian_diffusion_final(
-        steps=diffusion_steps,
-        learn_sigma=learn_sigma,
-        noise_schedule=noise_schedule,
-        use_kl=use_kl,
-        predict_xstart=predict_xstart,
-        rescale_timesteps=rescale_timesteps,
-        rescale_learned_sigmas=rescale_learned_sigmas,
-        timestep_respacing=timestep_respacing,
-    )
-    return model, diffusion
-
-
-def create_gaussian_diffusion_final(
-    *,
-    steps=1000,
-    learn_sigma=False,
-    sigma_small=False,
-    noise_schedule="linear",
-    use_kl=False,
-    predict_xstart=False,
-    rescale_timesteps=False,
-    rescale_learned_sigmas=False,
-    timestep_respacing="",
-):
-    betas = gd_final.get_named_beta_schedule(noise_schedule, steps)
-    # betas is a 1D numpy array of length steps
-    if use_kl:
-        loss_type = gd_final.LossType.RESCALED_KL
-    elif rescale_learned_sigmas:
-        loss_type = gd_final.LossType.RESCALED_MSE
-    else: # default type
-        loss_type = gd_final.LossType.MSE
-    if not timestep_respacing:
-        timestep_respacing = [steps]
-    
-    # use_timesteps is a set of integers that range from 0 to steps-1
-    # it contains timestep_respacing integers that uniformly covers the interval
-    # learn_sigma is true in our case, rescale_timesteps is false in our time
-    return SpacedDiffusion_1(
-        use_timesteps=space_timesteps(steps, timestep_respacing),
-        betas=betas,
-        model_mean_type=(
-            gd_final.ModelMeanType.EPSILON if not predict_xstart else gd_final.ModelMeanType.START_X
-            # gd.ModelMeanType.PREVIOUS_X if not predict_xstart else gd.ModelMeanType.EPSILON
-        ),
-        model_var_type=(
-            (
-                gd_final.ModelVarType.FIXED_LARGE
-                if not sigma_small
-                else gd_final.ModelVarType.FIXED_SMALL
-            )
-            if not learn_sigma
-            else gd_final.ModelVarType.LEARNED_RANGE
-        ),
-        loss_type=loss_type,
-        rescale_timesteps=rescale_timesteps,
-    )
-
-
-def create_model_and_diffusion_direct(
-    image_size,
-    class_cond,
-    learn_sigma,
-    num_channels,
-    num_res_blocks,
-    channel_mult,
-    num_heads,
-    num_head_channels,
-    num_heads_upsample,
-    attention_resolutions,
-    dropout,
-    diffusion_steps,
-    noise_schedule,
-    timestep_respacing,
-    use_kl,
-    predict_xstart,
-    rescale_timesteps,
-    rescale_learned_sigmas,
-    use_checkpoint,
-    use_scale_shift_norm,
-    resblock_updown,
-    use_fp16,
-    use_new_attention_order,
-):
-    model = create_model(
-        image_size,
-        num_channels,
-        num_res_blocks,
-        channel_mult=channel_mult,
-        learn_sigma=learn_sigma,
-        class_cond=class_cond,
-        use_checkpoint=use_checkpoint,
-        attention_resolutions=attention_resolutions,
-        num_heads=num_heads,
-        num_head_channels=num_head_channels,
-        num_heads_upsample=num_heads_upsample,
-        use_scale_shift_norm=use_scale_shift_norm,
-        dropout=dropout,
-        resblock_updown=resblock_updown,
-        use_fp16=use_fp16,
-        use_new_attention_order=use_new_attention_order,
-    )
-    diffusion = create_gaussian_diffusion_direct(
-        steps=diffusion_steps,
-        learn_sigma=learn_sigma,
-        noise_schedule=noise_schedule,
-        use_kl=use_kl,
-        predict_xstart=predict_xstart,
-        rescale_timesteps=rescale_timesteps,
-        rescale_learned_sigmas=rescale_learned_sigmas,
-        timestep_respacing=timestep_respacing,
-    )
-    return model, diffusion
-
-
-def create_gaussian_diffusion_direct(
-    *,
-    steps=1000,
-    learn_sigma=False,
-    sigma_small=False,
-    noise_schedule="linear",
-    use_kl=False,
-    predict_xstart=False,
-    rescale_timesteps=False,
-    rescale_learned_sigmas=False,
-    timestep_respacing="",
-):
-    betas = gd_direct.get_named_beta_schedule(noise_schedule, steps)
-    # betas is a 1D numpy array of length steps
-    if use_kl:
-        loss_type = gd_direct.LossType.RESCALED_KL
-    elif rescale_learned_sigmas:
-        loss_type = gd_direct.LossType.RESCALED_MSE
-    else: # default type
-        loss_type = gd_direct.LossType.MSE
-    if not timestep_respacing:
-        timestep_respacing = [steps]
-    
-    # use_timesteps is a set of integers that range from 0 to steps-1
-    # it contains timestep_respacing integers that uniformly covers the interval
-    # learn_sigma is true in our case, rescale_timesteps is false in our time
-    return SpacedDiffusion_direct(
-        use_timesteps=space_timesteps(steps, timestep_respacing),
-        betas=betas,
-        model_mean_type=(
-            gd_direct.ModelMeanType.EPSILON if not predict_xstart else gd_direct.ModelMeanType.START_X
-            # gd.ModelMeanType.PREVIOUS_X if not predict_xstart else gd.ModelMeanType.EPSILON
-        ),
-        model_var_type=(
-            (
-                gd_direct.ModelVarType.FIXED_LARGE
-                if not sigma_small
-                else gd_direct.ModelVarType.FIXED_SMALL
-            )
-            if not learn_sigma
-            else gd_direct.ModelVarType.LEARNED_RANGE
-        ),
-        loss_type=loss_type,
-        rescale_timesteps=rescale_timesteps,
-    )
-
 
 def create_model_and_diffusion_RR(
     image_size,
@@ -683,7 +376,7 @@ def create_model_and_diffusion_RR(
         use_fp16=use_fp16,
         use_new_attention_order=use_new_attention_order,
     )
-    diffusion = create_gaussian_diffusion_HDR(
+    diffusion = create_gaussian_diffusion_RR(
         steps=diffusion_steps,
         learn_sigma=learn_sigma,
         noise_schedule=noise_schedule,
@@ -696,7 +389,7 @@ def create_model_and_diffusion_RR(
     return model, diffusion
 
 
-def create_gaussian_diffusion_HDR(
+def create_gaussian_diffusion_RR(
     *,
     steps=1000,
     learn_sigma=False,
@@ -708,35 +401,35 @@ def create_gaussian_diffusion_HDR(
     rescale_learned_sigmas=False,
     timestep_respacing="",
 ):
-    betas = gd_HDR.get_named_beta_schedule(noise_schedule, steps)
+    betas = gd_RR.get_named_beta_schedule(noise_schedule, steps)
     # betas is a 1D numpy array of length steps
     if use_kl:
-        loss_type = gd_HDR.LossType.RESCALED_KL
+        loss_type = gd_RR.LossType.RESCALED_KL
     elif rescale_learned_sigmas:
-        loss_type = gd_HDR.LossType.RESCALED_MSE
+        loss_type = gd_RR.LossType.RESCALED_MSE
     else: # default type
-        loss_type = gd_HDR.LossType.MSE
+        loss_type = gd_RR.LossType.MSE
     if not timestep_respacing:
         timestep_respacing = [steps]
     
     # use_timesteps is a set of integers that range from 0 to steps-1
     # it contains timestep_respacing integers that uniformly covers the interval
     # learn_sigma is true in our case, rescale_timesteps is false in our time
-    return SpacedDiffusion_HDR(
+    return SpacedDiffusion(
         use_timesteps=space_timesteps(steps, timestep_respacing),
         betas=betas,
         model_mean_type=(
-            gd_HDR.ModelMeanType.EPSILON if not predict_xstart else gd_HDR.ModelMeanType.START_X
+            gd_RR.ModelMeanType.EPSILON if not predict_xstart else gd_RR.ModelMeanType.START_X
             # gd.ModelMeanType.PREVIOUS_X if not predict_xstart else gd.ModelMeanType.EPSILON
         ),
         model_var_type=(
             (
-                gd_HDR.ModelVarType.FIXED_LARGE
+                gd_RR.ModelVarType.FIXED_LARGE
                 if not sigma_small
-                else gd_HDR.ModelVarType.FIXED_SMALL
+                else gd_RR.ModelVarType.FIXED_SMALL
             )
             if not learn_sigma
-            else gd_HDR.ModelVarType.LEARNED_RANGE
+            else gd_RR.ModelVarType.LEARNED_RANGE
         ),
         loss_type=loss_type,
         rescale_timesteps=rescale_timesteps,

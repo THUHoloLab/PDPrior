@@ -2077,7 +2077,7 @@ class GaussianDiffusion_RR:
                 img_reflection = out_reflection["sample"]
                 light_factor_0 = light_factor_0
 
-
+                '''
                 base_name = img_name[0].split('.')[0]
                 ext = img_name[0].split('.')[1]
                 new_name = f"{base_name}_{t.item()}.{ext}"
@@ -2111,6 +2111,8 @@ class GaussianDiffusion_RR:
                             "/data/cyt2/difussionRR/test_analys_eyeglass/256/6_iter/images_reflection_iter/")
                 save_images(sample_t, new_name,
                             "/data/cyt2/difussionRR/test_analys_eyeglass/256/6_iter/images_t_iter/")
+                
+                '''
 
     def ddim_sample(
         self,
