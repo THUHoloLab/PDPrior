@@ -16,8 +16,6 @@ from guided_diffusion import logger
 from guided_diffusion.script_util_x0_enhancement import (
     NUM_CLASSES,
     model_and_diffusion_defaults,
-    create_model_and_diffusion,
-    create_model_and_diffusion_direct,
     create_model_and_diffusion_RR,
     add_dict_to_argparser,
     args_to_dict,
@@ -302,8 +300,7 @@ def main():
                 x_input = (x_input + 1) / 2
 
                 mse_0 = l1_loss(x_in, (x_input - (1 - t_coeff)/scale * x_reflection_in))  # /3 室内眼镜反光
-                cap=cap_loss(x_in)
-                loss = loss - (3500*mse_0+100*cap)* args.img_guidance_scale # mse_0 +mse_45+ mse_135 100*excl+100*cc
+                loss = loss - (3500*mse_0)* args.img_guidance_scale # mse_0 +mse_45+ mse_135 100*excl+100*cc
 
                 '''print('step t %d,  mse is %.8f, cap is %.8f' % (
                     t[0], 3500*mse_0, 100*cap))# excl is %.8f, cc is %.8f,'''
