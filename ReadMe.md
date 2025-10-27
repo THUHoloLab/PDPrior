@@ -1,1 +1,1 @@
-
+We collected a polarized test dataset containing 27 groups of face images. It consists of eight subfolders: 0/45/90/135/AoLP/DoLP/S0/Raw, corresponding to the linearly polarized intensity images at four angles, angle of linear polarization, degree of linear polarization, total intensity image, and raw polarization data. [Click here to download](https://cloud.tsinghua.edu.cn/f/a49e0f59a8a54c4eb14d/?dl=1)
