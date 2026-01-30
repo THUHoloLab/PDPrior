@@ -243,11 +243,9 @@ def main():
             #loss_t = 0
             loss_reflection = 0
             if not x_reflection_in is None:
-                x_supervised = x_supervised[:, :, corner[0]:corner[0] + corner[2], corner[1]:corner[1] + corner[2]]
                 x_input = x_input[:, :, corner[0]:corner[0] + corner[2], corner[1]:corner[1] + corner[2]]
                 DoLP = DoLP[:, :, corner[0]:corner[0] + corner[2], corner[1]:corner[1] + corner[2]]
 
-                x_in=(x_in + 1) / 2
                 x_reflection_in=(x_reflection_in + 1) / 2
                 #x_supervised = x_supervised.to(device_x_in_lr)
                 k=5.0
@@ -459,12 +457,15 @@ def main():
             img_name=img_name)
 
         sample = sample.clamp(-1, 1)
-        #sample = torch.pow((sample+1)/2.0, 1.3)
-        #sample = (sample * 255).clamp(0, 255).to(th.uint8)
-        sample = ((((sample + 1) * 127.5)).clamp(0, 255).to(th.uint8))  #
-        sample = sample.permute(0, 2, 3, 1)
-        sample = sample.contiguous()
-        sample = sample.detach().cpu().numpy()
+        sample = (sample+1)/2
+        sample_np = sample.detach().cpu().numpy()  # [B, C, H, W]
+        for b in range(sample_np.shape[0]):
+            for c in range(sample_np.shape[1]):
+                sample_np[b, c] = wiener(sample_np[b, c], mysize=(3, 3))
+        sample = th.from_numpy(sample_np).to(sample.device)
+        sample = (sample * 255).clamp(0, 255).to(th.uint8)
+        sample = sample.permute(0, 2, 3, 1).contiguous()
+        sample = sample.cpu().numpy()
 
         sample_reflection = sample_reflection.clamp(-1, 1)
         #sample_reflection = torch.pow((sample_reflection+1)/2.0, 1.3)
@@ -512,14 +513,15 @@ def main():
 
 
 def create_argparser():
-    defaults = dict(
+    revise_defaults = dict(
         clip_denoised=True,
         num_samples=100,
         batch_size=1,
         use_ddim=False,
+        in_channels=3,
     )
-    defaults.update(model_and_diffusion_defaults())
-    parser = argparse.ArgumentParser()
+    defaults = model_and_diffusion_defaults()
+    defaults.update(revise_defaults)
     add_dict_to_argparser(parser, defaults)
     # add zhaoyang own's arguments
     parser.add_argument("--device", default=3, type=int, help='the cuda device to use to generate images')
